@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Location</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 20px;
+    background: transparent;
+    font-family: Arial, sans-serif;
+    color: white;
+}
+
+.location {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 20px;
+    background: rgba(15, 18, 23, 0.88);
+    border-radius: 12px;
+    border-left: 4px solid #35c978;
+    max-width: 95vw;
+}
+
+.pin {
+    font-size: 25px;
+}
+
+.text {
+    font-size: 20px;
+    font-weight: 600;
+    text-shadow: 0 1px 3px #000;
+}
+
+.status {
+    margin-top: 5px;
+    font-size: 11px;
+    color: #aeb8c2;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="location">
+    <div class="pin">📍</div>
+    <div>
+        <div class="text" id="address">Определяем местоположение...</div>
+        <div class="status" id="status">GPS подключается</div>
+    </div>
+</div>
+
+<script>
+const addressElement = document.getElementById("address");
+const statusElement = document.getElementById("status");
+
+let lastLat = null;
+let lastLon = null;
+let lastRequest = 0;
+
+function distance(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const rad = x => x * Math.PI / 180;
+
+    const dLat = rad(lat2 - lat1);
+    const dLon = rad(lon2 - lon1);
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(rad(lat1)) *
+        Math.cos(rad(lat2)) *
+        Math.sin(dLon / 2) ** 2;
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function getAddress(lat, lon) {
+    const now = Date.now();
+
+    if (now - lastRequest < 2000) return;
+
+    if (lastLat !== null &&
+        distance(lastLat, lastLon, lat, lon) < 35) return;
+
+    lastRequest = now;
+    lastLat = lat;
+    lastLon = lon;
+
+    statusElement.textContent = "Обновляем адрес...";
+
+    try {
+        const url =
+            "https://nominatim.openstreetmap.org/reverse" +
+            "?format=jsonv2&lat=" + lat +
+            "&lon=" + lon +
+            "&zoom=18&addressdetails=1";
+
+        const response = await fetch(url);
+
+        if (!response.ok) throw new Error("Address error");
+
+        const data = await response.json();
+        const a = data.address || {};
+
+        const street =
+            a.road ||
+            a.pedestrian ||
+            a.residential ||
+            a.footway ||
+            "";
+
+        const house = a.house_number || "";
+        const city =
+            a.city ||
+            a.town ||
+            a.village ||
+            a.suburb ||
+            "";
+
+        let result = street;
+
+        if (house) result += ", " + house;
+        if (!result) result = city || "Адрес не найден";
+
+        addressElement.textContent = result;
+        statusElement.textContent = city || "GPS активен";
+
+    } catch (error) {
+        statusElement.textContent = "Не удалось получить адрес";
+    }
+}
+
+function startGPS() {
+    if (!navigator.geolocation) {
+        addressElement.textContent = "GPS недоступен";
+        return;
+    }
+
+    navigator.geolocation.watchPosition(
+        position => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+
+            getAddress(lat, lon);
+        },
+        error => {
+            addressElement.textContent = "Нет доступа к GPS";
+            statusElement.textContent = "Проверь разрешение геолокации";
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 5000,
+            timeout: 20000
+        }
+    );
+}
+
+startGPS();
+</script>
+
+<div style="font-size:10px;color:#aaa;margin-top:5px;">
+    © OpenStreetMap contributors
+</div>
+
+</body>
+</html>
